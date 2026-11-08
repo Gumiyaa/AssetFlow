@@ -20,7 +20,15 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  const session = readStore(STORAGE_KEYS.session)
+  let session = readStore(STORAGE_KEYS.session)
+  if (!session?.token) {
+    try {
+      const raw = window.sessionStorage.getItem('assetflow:session')
+      session = raw ? JSON.parse(raw) : null
+    } catch {
+      session = null
+    }
+  }
   if (session?.token) {
     config.headers.Authorization = `Bearer ${session.token}`
   }
@@ -34,7 +42,9 @@ api.interceptors.response.use(
       error?.response?.data?.message ||
       error?.message ||
       'Terjadi kesalahan saat menghubungi server.'
-    return Promise.reject(Object.assign(error, { friendlyMessage: message }))
+    error.friendlyMessage = message
+    error.message = message
+    return Promise.reject(error)
   },
 )
 

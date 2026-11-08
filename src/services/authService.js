@@ -1,4 +1,4 @@
-import { currentUser } from '../data/mockData'
+import { api } from './api'
 import { readStore, writeStore, removeStore, STORAGE_KEYS } from './storage'
 
 const DEMO_ACCOUNT = {
@@ -6,29 +6,71 @@ const DEMO_ACCOUNT = {
   password: 'assetflow123',
 }
 
+const SESSION_STORAGE_KEY = 'assetflow:session'
+
 const delay = (ms = 500) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+function readSession() {
+  const persistent = readStore(STORAGE_KEYS.session, null)
+  if (persistent) return persistent
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function persistSession(session, remember) {
+  if (remember) {
+    writeStore(STORAGE_KEYS.session, session)
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
+  } else {
+    removeStore(STORAGE_KEYS.session)
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+  }
+}
+
+function toApiProfile(payload = {}) {
+  const mapping = {
+    name: 'name',
+    email: 'email',
+    username: 'username',
+    phone: 'phone',
+    position: 'position',
+    department: 'department',
+    initials: 'initials',
+    avatarColor: 'avatar_color',
+  }
+
+  return Object.entries(mapping).reduce((result, [from, to]) => {
+    if (payload[from] !== undefined) result[to] = payload[from]
+    return result
+  }, {})
+}
 
 export const authService = {
   demoAccount: DEMO_ACCOUNT,
 
   getSession() {
-    return readStore(STORAGE_KEYS.session, null)
+    return readSession()
   },
 
   async login({ email, password, remember = true }) {
-    await delay(650)
-    const normalized = String(email || '').trim().toLowerCase()
-    if (normalized !== DEMO_ACCOUNT.email || password !== DEMO_ACCOUNT.password) {
-      throw new Error('Email atau kata sandi tidak sesuai. Gunakan akun demo yang tersedia.')
-    }
+    const { data } = await api.post('/auth/login', {
+      email: String(email || '').trim().toLowerCase(),
+      password,
+      device_name: 'AssetFlow Web',
+    })
+
     const session = {
-      token: `demo.${btoa(normalized).replaceAll('=', '')}.${Date.now()}`,
-      user: { ...currentUser, email: normalized },
+      token: data.token,
+      user: data.user,
       loggedInAt: new Date().toISOString(),
       remember,
     }
-    if (remember) writeStore(STORAGE_KEYS.session, session)
-    else window.sessionStorage.setItem('assetflow:session', JSON.stringify(session))
+
+    persistSession(session, remember)
     return session
   },
 
@@ -39,17 +81,35 @@ export const authService = {
   },
 
   async logout() {
-    await delay(150)
+    const session = readSession()
+    if (session?.token) {
+      try {
+        await api.post('/auth/logout')
+      } catch {
+        /* token may already be expired — clear the local session regardless */
+      }
+    }
     removeStore(STORAGE_KEYS.session)
-    window.sessionStorage.removeItem('assetflow:session')
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY)
   },
 
   async updateProfile(payload) {
-    await delay(300)
-    const session = this.getSession()
+    const session = readSession()
     if (!session) throw new Error('Sesi tidak ditemukan')
-    const updated = { ...session, user: { ...session.user, ...payload } }
-    writeStore(STORAGE_KEYS.session, updated)
+
+    const { data } = await api.put('/auth/profile', toApiProfile(payload))
+    const updated = { ...session, user: data.user }
+    persistSession(updated, session.remember !== false)
+    return updated
+  },
+
+  async refreshUser() {
+    const session = readSession()
+    if (!session?.token) return null
+
+    const { data } = await api.get('/auth/me')
+    const updated = { ...session, user: data.user }
+    persistSession(updated, session.remember !== false)
     return updated
   },
 }
