@@ -257,4 +257,6 @@ Planned: `GET /api/dashboard/summary` returning asset totals by status/category,
 - `src/services/api.js` is the single Axios instance. It reads the stored session and attaches the Bearer token.
 - `src/services/authService.js` owns session persistence. A remembered session uses `localStorage`; an unremembered session uses `sessionStorage`.
 - The user object returned by auth endpoints must keep the camelCase shape above so existing pages (dashboard, profile, users) do not need changes.
+- Users and employees lists/details are loaded from the API by `DataContext` after login. If the API is unavailable, the frontend falls back to the local mock directory.
+- Write actions for users and employees are intentionally disabled until their POST/PUT/DELETE endpoints are implemented.
 - Module services will be switched from localStorage to this API one module at a time, keeping their existing method signatures.

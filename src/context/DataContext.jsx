@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useAuth } from './AuthContext'
 import { ensureSeeded, getDB, resetDB, saveDB } from '../services/db'
 import { assetService } from '../services/assetService'
 import { inventoryService } from '../services/inventoryService'
@@ -10,15 +11,46 @@ import { userService } from '../services/userService'
 const DataContext = createContext(null)
 
 export function DataProvider({ children }) {
+  const { isAuthenticated } = useAuth()
   const [data, setData] = useState(() => {
     ensureSeeded()
     return getDB()
   })
   const [loading, setLoading] = useState(false)
+  const [directory, setDirectory] = useState(null)
+  const [directoryLoading, setDirectoryLoading] = useState(false)
+  const [directoryError, setDirectoryError] = useState('')
 
   const refresh = useCallback(() => {
     setData(getDB())
   }, [])
+
+  const loadDirectory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setDirectory(null)
+      setDirectoryError('')
+      return null
+    }
+
+    setDirectoryLoading(true)
+    setDirectoryError('')
+    try {
+      const [employees, users] = await Promise.all([employeeService.all(), userService.all()])
+      const next = { employees, users }
+      setDirectory(next)
+      return next
+    } catch (error) {
+      setDirectoryError(error.message)
+      setDirectory(null)
+      return null
+    } finally {
+      setDirectoryLoading(false)
+    }
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    loadDirectory()
+  }, [loadDirectory])
 
   useEffect(() => {
     const handleUpdate = () => setData(getDB())
@@ -44,6 +76,7 @@ export function DataProvider({ children }) {
   const actions = useMemo(
     () => ({
       refresh,
+      refreshDirectory: loadDirectory,
       createAsset: (payload) => run(() => assetService.create(payload)),
       updateAsset: (id, payload) => run(() => assetService.update(id, payload)),
       deleteAsset: (id) => run(() => assetService.remove(id)),
@@ -95,13 +128,17 @@ export function DataProvider({ children }) {
         setData(next)
       },
     }),
-    [refresh, run],
+    [refresh, run, loadDirectory],
   )
 
   const value = useMemo(
     () => ({
       ...data,
+      employees: directory?.employees ?? data.employees,
+      users: directory?.users ?? data.users,
       loading,
+      directoryLoading,
+      directoryError,
       actions,
       counts: {
         pendingBorrowings: data.borrowings.filter((item) => item.status === 'Menunggu Persetujuan').length,
@@ -111,7 +148,7 @@ export function DataProvider({ children }) {
         unread: data.notifications.filter((item) => !item.read).length,
       },
     }),
-    [data, loading, actions],
+    [data, directory, loading, directoryLoading, directoryError, actions],
   )
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>
