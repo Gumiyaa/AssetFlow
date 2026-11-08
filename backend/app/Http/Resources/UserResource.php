@@ -30,6 +30,9 @@ class UserResource extends JsonResource
             'twoFA' => $this->two_fa,
             'status' => $this->status,
             'lastLogin' => $this->formatLastLogin(),
+            'lastActive' => $this->last_active ?: $this->formatLastLogin(),
+            'device' => $this->device,
+            'modules' => $this->modules,
         ];
     }
 

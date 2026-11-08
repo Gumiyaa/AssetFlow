@@ -34,6 +34,9 @@ class User extends Authenticatable
         'two_fa',
         'status',
         'last_login',
+        'last_active',
+        'device',
+        'modules',
     ];
 
     /**

@@ -80,7 +80,10 @@ Response `200`:
     "joinDate": "2021-01-12",
     "twoFA": "FIDO2 / Hardware Token",
     "status": "Aktif",
-    "lastLogin": "Hari ini, 10:42 WIB"
+    "lastLogin": "Hari ini, 10:42 WIB",
+    "lastActive": "Hari ini, 10:42 WIB",
+    "device": "macOS • Chrome • 10.12.84.15",
+    "modules": "Semua Modul (Full Access)"
   }
 }
 ```
@@ -123,9 +126,66 @@ Role, status, and permissions are intentionally not self-editable through this e
 
 ---
 
+## Module endpoints
+
+### Employees — `/api/employees` (GET implemented)
+
+Requires Bearer token.
+
+| Method | Path | Purpose | Frontend method |
+| ------ | ---- | ------- | --------------- |
+| GET | `/api/employees` | List employees | `employeeService.all()` |
+| GET | `/api/employees/{id}` | Employee detail | `employeeService.get(id)` |
+| POST | `/api/employees` | Create employee | `employeeService.create(payload)` — planned |
+| PUT | `/api/employees/{id}` | Update employee | `employeeService.update(id, payload)` — planned |
+| DELETE | `/api/employees/{id}` | Delete employee | `employeeService.remove(id)` — planned |
+
+List response:
+
+```json
+{
+  "data": [
+    {
+      "id": "EMP-2022-094",
+      "name": "Dimas Saputra",
+      "email": "dimas.saputra@assetflow.id",
+      "phone": "+62 812-8890-4412",
+      "department": "Information Technology",
+      "position": "Lead DevOps & Field Systems Engineer",
+      "status": "Aktif",
+      "joinDate": "2022-03-15",
+      "manager": "Fajar Anugrah",
+      "location": "Kantor Pusat Jakarta Lt. 3",
+      "initials": "DS",
+      "avatarColor": "#1B4B6B",
+      "assets": 3,
+      "grade": "Grade A",
+      "notes": "..."
+    }
+  ]
+}
+```
+
+Detail response: `{ "data": { "...employee object..." } }`.
+
+### Users and access — `/api/users` (GET implemented)
+
+Requires Bearer token.
+
+| Method | Path | Purpose | Frontend method |
+| ------ | ---- | ------- | --------------- |
+| GET | `/api/users` | List accounts | `userService.all()` |
+| GET | `/api/users/{id}` | Account detail | `userService.get(id)` |
+| POST | `/api/users` | Create account | `userService.create(payload)` — planned |
+| PUT | `/api/users/{id}` | Update account | `userService.update(id, payload)` — planned |
+| POST | `/api/users/{id}/toggle-status` | Activate/deactivate | `userService.toggleStatus(id)` — planned |
+| DELETE | `/api/users/{id}` | Delete account | `userService.remove(id)` — planned |
+
+User list/detail objects use the same shape as the auth `user` object. List response is `{ "data": [...] }`; detail response is `{ "data": { "...user object..." } }`.
+
 ## Planned module endpoints
 
-These endpoints are not implemented yet. They are listed so the frontend service layer and the backend can be built against one contract.
+Assets, inventory, borrowings, maintenance, reports, and dashboard endpoints are not implemented yet. They are listed so the frontend service layer and the backend can be built against one contract.
 
 ### Assets — `/api/assets`
 
@@ -177,27 +237,6 @@ Statuses: `Menunggu Persetujuan`, `Disetujui`, `Ditolak`, `Dipinjam`, `Dikembali
 | PUT | `/api/maintenance/{id}` | Update work order | `maintenanceService.update(id, payload)` |
 | POST | `/api/maintenance/{id}/progress` | Update progress | `maintenanceService.updateProgress(id, payload)` |
 | POST | `/api/maintenance/{id}/checklist/{index}/toggle` | Toggle checklist item | `maintenanceService.toggleChecklist(id, index)` |
-
-### Employees — `/api/employees`
-
-| Method | Path | Purpose | Frontend method |
-| ------ | ---- | ------- | --------------- |
-| GET | `/api/employees` | List employees | `employeeService.all()` |
-| GET | `/api/employees/{id}` | Employee detail | `employeeService.get(id)` |
-| POST | `/api/employees` | Create employee | `employeeService.create(payload)` |
-| PUT | `/api/employees/{id}` | Update employee | `employeeService.update(id, payload)` |
-| DELETE | `/api/employees/{id}` | Delete employee | `employeeService.remove(id)` |
-
-### Users and access — `/api/users`
-
-| Method | Path | Purpose | Frontend method |
-| ------ | ---- | ------- | --------------- |
-| GET | `/api/users` | List accounts | `userService.all()` |
-| GET | `/api/users/{id}` | Account detail | `userService.get(id)` |
-| POST | `/api/users` | Create account | `userService.create(payload)` |
-| PUT | `/api/users/{id}` | Update account | `userService.update(id, payload)` |
-| POST | `/api/users/{id}/toggle-status` | Activate/deactivate | `userService.toggleStatus(id)` |
-| DELETE | `/api/users/{id}` | Delete account | `userService.remove(id)` |
 
 ### Reports — `/api/reports`
 

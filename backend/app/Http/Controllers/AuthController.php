@@ -37,7 +37,10 @@ class AuthController extends Controller
             ], 403);
         }
 
-        $user->forceFill(['last_login' => now()])->save();
+        $user->forceFill([
+            'last_login' => now(),
+            'last_active' => 'Hari ini, '.now()->format('H:i').' WIB',
+        ])->save();
 
         $deviceName = $credentials['device_name'] ?? 'AssetFlow Web';
         $token = $user->createToken($deviceName)->plainTextToken;
