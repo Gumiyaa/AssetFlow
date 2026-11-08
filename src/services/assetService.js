@@ -109,17 +109,18 @@ export const assetService = {
     await delay(180)
     return updateDB((db) => {
       const asset = db.assets.find((item) => item.id === id || item.code === id)
+      const matchesAsset = (item) =>
+        asset && (item.assetId === asset.id || item.assetId === asset.code)
       const activeBorrowing = db.borrowings.some(
         (item) =>
-          asset &&
-          item.assetId === asset.id &&
+          matchesAsset(item) &&
           ['Menunggu Persetujuan', 'Disetujui', 'Sedang Dipinjam', 'Terlambat'].includes(item.status),
       )
       if (activeBorrowing) {
         throw new Error('Aset masih terkait peminjaman aktif. Selesaikan peminjaman sebelum menghapus aset.')
       }
       const activeMaintenance = db.maintenance.some(
-        (item) => asset && item.assetId === asset.id && item.status !== 'Selesai',
+        (item) => matchesAsset(item) && item.status !== 'Selesai',
       )
       if (activeMaintenance) {
         throw new Error('Aset masih memiliki tiket pemeliharaan aktif. Selesaikan tiket sebelum menghapus aset.')

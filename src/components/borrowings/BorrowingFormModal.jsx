@@ -39,7 +39,7 @@ const emptyValues = {
   notes: '',
 }
 
-export default function BorrowingFormModal({ open, onClose, onSubmit, submitting, employees, assets }) {
+export default function BorrowingFormModal({ open, onClose, onSubmit, submitting, employees, assets, borrowings = [] }) {
   const {
     register,
     handleSubmit,
@@ -58,10 +58,18 @@ export default function BorrowingFormModal({ open, onClose, onSubmit, submitting
 
   const employee = useMemo(() => employees.find((item) => item.id === employeeId), [employees, employeeId])
   const asset = useMemo(() => assets.find((item) => item.id === assetId), [assets, assetId])
-  const availableAssets = useMemo(
-    () => assets.filter((item) => ['Tersedia', 'Aktif'].includes(item.status)),
-    [assets],
-  )
+  const availableAssets = useMemo(() => {
+    const activeStatuses = ['Menunggu Persetujuan', 'Disetujui', 'Sedang Dipinjam', 'Terlambat']
+    const busyAssetIds = new Set(
+      borrowings.filter((item) => activeStatuses.includes(item.status)).map((item) => item.assetId),
+    )
+    return assets.filter(
+      (item) =>
+        ['Tersedia', 'Aktif'].includes(item.status) &&
+        !busyAssetIds.has(item.id) &&
+        !busyAssetIds.has(item.code),
+    )
+  }, [assets, borrowings])
 
   const submit = handleSubmit(async (values) => {
     await onSubmit({

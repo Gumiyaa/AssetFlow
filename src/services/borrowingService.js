@@ -31,7 +31,7 @@ export const borrowingService = {
       }
       const activeBorrowing = db.borrowings.some(
         (item) =>
-          item.assetId === asset.id &&
+          (item.assetId === asset.id || item.assetId === asset.code) &&
           ['Menunggu Persetujuan', 'Disetujui', 'Sedang Dipinjam', 'Terlambat'].includes(item.status),
       )
       if (activeBorrowing) {

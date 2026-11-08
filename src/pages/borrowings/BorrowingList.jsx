@@ -583,6 +583,7 @@ export default function BorrowingList() {
         submitting={busy}
         employees={employees}
         assets={assets}
+        borrowings={borrowings}
       />
 
       <ConfirmDialog

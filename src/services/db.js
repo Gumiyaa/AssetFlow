@@ -3,8 +3,29 @@ import { readStore, writeStore, STORAGE_KEYS } from './storage'
 
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
+// Seed borrowings/maintenance reference assets by their public code (e.g. AST-IT-2023-001),
+// while the rest of the app resolves relations by internal id (e.g. AST-1). Normalise the
+// references once so every lookup, filter, and integrity guard sees a consistent id.
+function normalizeAssetReferences(db) {
+  const idByCode = new Map((db.assets || []).map((asset) => [asset.code, asset.id]))
+  let changed = false
+  const normalize = (item) => {
+    const mapped = idByCode.get(item.assetId)
+    if (!mapped || mapped === item.assetId) return item
+    changed = true
+    return { ...item, assetId: mapped }
+  }
+  const borrowings = (db.borrowings || []).map(normalize)
+  const maintenance = (db.maintenance || []).map(normalize)
+  if (changed) {
+    db.borrowings = borrowings
+    db.maintenance = maintenance
+  }
+  return { db, changed }
+}
+
 export function buildSeed() {
-  return {
+  const db = {
     version: 1,
     seededAt: new Date().toISOString(),
     assets: clone(seed.assets),
@@ -17,11 +38,16 @@ export function buildSeed() {
     activities: clone(seed.activities),
     notifications: clone(seed.notifications),
   }
+  return normalizeAssetReferences(db).db
 }
 
 export function ensureSeeded(force = false) {
   const existing = readStore(STORAGE_KEYS.db)
-  if (existing && !force && existing.version === 1) return existing
+  if (existing && !force && existing.version === 1) {
+    const normalized = normalizeAssetReferences(existing)
+    if (normalized.changed) writeStore(STORAGE_KEYS.db, normalized.db)
+    return normalized.db
+  }
   const fresh = buildSeed()
   writeStore(STORAGE_KEYS.db, fresh)
   return fresh

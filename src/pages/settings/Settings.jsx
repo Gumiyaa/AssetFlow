@@ -7,16 +7,20 @@ import {
   Download,
   HardDrive,
   KeyRound,
+  Pencil,
+  Plus,
   RotateCcw,
   Save,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  X,
 } from 'lucide-react'
 import { useData } from '../../context/DataContext'
 import { useToast } from '../../context/ToastContext'
 import { useLocalStorage } from '../../hooks/useLocalStorage'
+import { useMasterData } from '../../hooks/useMasterData'
 import { getDB } from '../../services/db'
 import { STORAGE_KEYS } from '../../services/storage'
 import { companyProfile, systemPreferences } from '../../data/mockData'
@@ -45,11 +49,74 @@ const TABS = [
   { key: 'preferences', label: 'Preferensi', icon: SlidersHorizontal },
   { key: 'notifications', label: 'Notifikasi', icon: Bell },
   { key: 'security', label: 'Keamanan', icon: ShieldCheck },
+  { key: 'master', label: 'Data Master', icon: Database },
 ]
 
+const MASTER_COLLECTIONS = {
+  categories: {
+    key: 'categories',
+    label: 'Kategori Aset',
+    singular: 'kategori',
+    icon: Database,
+    fields: [
+      { key: 'name', label: 'Nama kategori', placeholder: 'Contoh: Perangkat Medis' },
+      { key: 'code', label: 'Kode kategori', placeholder: 'Contoh: MED' },
+    ],
+  },
+  departments: {
+    key: 'departments',
+    label: 'Departemen',
+    singular: 'departemen',
+    icon: Building2,
+    fields: [
+      { key: 'name', label: 'Nama departemen', placeholder: 'Contoh: Legal & Compliance' },
+      { key: 'code', label: 'Kode departemen', placeholder: 'Contoh: LGL' },
+      { key: 'head', label: 'Kepala departemen', placeholder: 'Nama penanggung jawab' },
+    ],
+  },
+  locations: {
+    key: 'locations',
+    label: 'Lokasi',
+    singular: 'lokasi',
+    icon: Building2,
+    fields: [
+      { key: 'name', label: 'Nama lokasi', placeholder: 'Contoh: Kantor Cabang Surabaya' },
+      { key: 'building', label: 'Gedung', placeholder: 'Nama gedung' },
+      { key: 'city', label: 'Kota', placeholder: 'Contoh: Surabaya' },
+    ],
+  },
+  units: {
+    key: 'units',
+    label: 'Satuan',
+    singular: 'satuan',
+    icon: Database,
+    fields: [
+      { key: 'name', label: 'Nama satuan', placeholder: 'Contoh: Lusin' },
+      { key: 'symbol', label: 'Simbol', placeholder: 'Contoh: lsn' },
+      { key: 'description', label: 'Keterangan', placeholder: 'Deskripsi singkat satuan' },
+    ],
+  },
+}
+
+const MASTER_KEYS = Object.keys(MASTER_COLLECTIONS)
+
+function nextMasterId(prefix, list) {
+  let highest = 0
+  for (const item of list) {
+    const match = String(item.id || '').match(new RegExp(`^${prefix}-(\\d+)$`))
+    if (match) highest = Math.max(highest, Number(match[1]))
+  }
+  return `${prefix}-${String(highest + 1).padStart(2, '0')}`
+}
+
 export default function Settings() {
-  const { actions } = useData()
+  const { assets, employees, users, inventory, actions } = useData()
   const toast = useToast()
+  const master = useMasterData()
+  const [masterKey, setMasterKey] = useState('categories')
+  const [masterEditingId, setMasterEditingId] = useState(null)
+  const [masterDraft, setMasterDraft] = useState({ name: '', code: '', head: '', building: '', city: '', symbol: '', description: '' })
+  const [masterDelete, setMasterDelete] = useState(null)
   const [tab, setTab] = useState('company')
   const [company, setCompany] = useLocalStorage(STORAGE_KEYS.settings, companyProfile)
   const [preferences, setPreferences] = useLocalStorage(STORAGE_KEYS.preferences, systemPreferences)
@@ -144,6 +211,176 @@ export default function Settings() {
     } finally {
       setBusy(false)
     }
+  }
+
+  const masterConfig = MASTER_COLLECTIONS[masterKey]
+  const masterItems = master[masterKey] || []
+
+  const masterUsage = (key, name) => {
+    const value = String(name || '').toLowerCase()
+    if (!value) return 0
+    const matches = (candidate) => String(candidate || '').toLowerCase() === value
+    if (key === 'categories') return assets.filter((asset) => matches(asset.category)).length
+    if (key === 'departments') {
+      return (
+        assets.filter((asset) => matches(asset.department)).length +
+        employees.filter((employee) => matches(employee.department)).length +
+        users.filter((user) => matches(user.department)).length
+      )
+    }
+    if (key === 'locations') {
+      return (
+        assets.filter((asset) => matches(asset.location)).length +
+        inventory.filter((item) => matches(item.location)).length +
+        employees.filter((employee) => matches(employee.location)).length
+      )
+    }
+    if (key === 'units') return inventory.filter((item) => matches(item.unit)).length
+    return 0
+  }
+
+  const resetMasterDraft = () => {
+    setMasterEditingId(null)
+    setMasterDraft({ name: '', code: '', head: '', building: '', city: '', symbol: '', description: '' })
+  }
+
+  const startMasterEdit = (item) => {
+    setMasterEditingId(item.id)
+    setMasterDraft({
+      name: item.name || '',
+      code: item.code || '',
+      head: item.head || '',
+      building: item.building || '',
+      city: item.city || '',
+      symbol: item.symbol || '',
+      description: item.description === '-' ? '' : item.description || '',
+    })
+  }
+
+  const handleMasterSave = () => {
+    const name = masterDraft.name.trim()
+    if (!name) {
+      toast.error('Nama wajib diisi', `Lengkapi nama ${masterConfig.singular} terlebih dahulu.`)
+      return
+    }
+    const duplicate = masterItems.some(
+      (item) => item.id !== masterEditingId && String(item.name || '').toLowerCase() === name.toLowerCase(),
+    )
+    if (duplicate) {
+      toast.error('Nama sudah digunakan', `${name} sudah terdaftar pada ${masterConfig.label.toLowerCase()}.`)
+      return
+    }
+    const existing = masterEditingId ? masterItems.find((item) => item.id === masterEditingId) : null
+    if (existing && existing.name !== name) {
+      const used = masterUsage(masterKey, existing.name)
+      if (used > 0) {
+        toast.error('Tidak dapat mengganti nama', `${existing.name} masih digunakan oleh ${used} data lain.`)
+        return
+      }
+    }
+    const code = String(masterDraft.code || '').trim().toUpperCase()
+    if (masterKey === 'categories' && code) {
+      const codeUsed = masterItems.some(
+        (item) => item.id !== masterEditingId && String(item.code || '').toUpperCase() === code,
+      )
+      if (codeUsed) {
+        toast.error('Kode sudah digunakan', `Kode ${code} sudah dipakai kategori lain.`)
+        return
+      }
+    }
+
+    master.updateCollection(masterKey, (list) => {
+      if (existing) {
+        return list.map((item) => {
+          if (item.id !== existing.id) return item
+          if (masterKey === 'categories') {
+            return { ...item, name, code: code || item.code }
+          }
+          if (masterKey === 'departments') {
+            return { ...item, name, code: code || item.code, head: masterDraft.head.trim() || '-' }
+          }
+          if (masterKey === 'locations') {
+            return { ...item, name, building: masterDraft.building.trim() || '-', city: masterDraft.city.trim() || '-' }
+          }
+          return {
+            ...item,
+            name,
+            symbol: masterDraft.symbol.trim() || name.toLowerCase(),
+            description: masterDraft.description.trim(),
+          }
+        })
+      }
+
+      let entry
+      if (masterKey === 'categories') {
+        entry = {
+          id: nextMasterId('CAT', list),
+          code: code || name.slice(0, 3).toUpperCase(),
+          name,
+          count: 0,
+          color: '#0E9384',
+        }
+      } else if (masterKey === 'departments') {
+        entry = {
+          id: nextMasterId('DEP', list),
+          code: code || name.slice(0, 3).toUpperCase(),
+          name,
+          head: masterDraft.head.trim() || '-',
+          employees: 0,
+          assets: 0,
+        }
+      } else if (masterKey === 'locations') {
+        entry = {
+          id: nextMasterId('LOC', list),
+          name,
+          building: masterDraft.building.trim() || '-',
+          floor: '-',
+          city: masterDraft.city.trim() || '-',
+        }
+      } else {
+        entry = {
+          id: nextMasterId('UNT', list),
+          name,
+          symbol: masterDraft.symbol.trim() || name.toLowerCase(),
+          description: masterDraft.description.trim(),
+        }
+      }
+      return [...list, entry]
+    })
+
+    toast.success(
+      existing ? `${masterConfig.label} diperbarui` : `${masterConfig.label} ditambahkan`,
+      `${name} tersimpan pada data master.`,
+    )
+    resetMasterDraft()
+  }
+
+  const promptMasterDelete = (item) => {
+    if (masterItems.length <= 1) {
+      toast.error('Tidak dapat menghapus', `Minimal satu ${masterConfig.singular} harus tersedia.`)
+      return
+    }
+    const used = masterUsage(masterKey, item.name)
+    if (used > 0) {
+      toast.error('Tidak dapat menghapus', `${item.name} masih digunakan oleh ${used} data lain.`)
+      return
+    }
+    setMasterDelete(item)
+  }
+
+  const handleMasterDelete = () => {
+    if (!masterDelete) return
+    master.updateCollection(masterKey, (list) => list.filter((item) => item.id !== masterDelete.id))
+    toast.success(`${masterConfig.label} dihapus`, `${masterDelete.name} dihapus dari data master.`)
+    if (masterEditingId === masterDelete.id) resetMasterDraft()
+    setMasterDelete(null)
+  }
+
+  const masterSubtitle = (item, key) => {
+    if (key === 'categories') return `Kode ${item.code || '-'} · ${formatNumber(item.count || 0)} aset`
+    if (key === 'departments') return `${item.code || '-'} · ${item.head || '-'}`
+    if (key === 'locations') return [item.building, item.city].filter(Boolean).join(' · ') || '-'
+    return `${item.symbol || '-'}${item.description ? ` · ${item.description}` : ''}`
   }
 
   return (
@@ -420,6 +657,118 @@ export default function Settings() {
                 </div>
               </div>
             ) : null}
+
+            {tab === 'master' ? (
+              <div className="space-y-4 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-[12px] font-semibold text-ink-900">Katalog data master</h3>
+                    <p className="mt-0.5 text-[10.5px] leading-relaxed text-ink-500">
+                      Kelola referensi yang dipakai pada formulir aset, inventaris, karyawan, dan pengguna.
+                    </p>
+                  </div>
+                  <Badge tone="neutral">
+                    {masterItems.length} {masterConfig.label.toLowerCase()}
+                  </Badge>
+                </div>
+
+                <Tabs
+                  variant="pill"
+                  items={MASTER_KEYS.map((key) => ({
+                    key,
+                    label: MASTER_COLLECTIONS[key].label,
+                    count: (master[key] || []).length,
+                  }))}
+                  value={masterKey}
+                  onChange={(next) => {
+                    setMasterKey(next)
+                    resetMasterDraft()
+                  }}
+                />
+
+                <div className="rounded-xl border border-line">
+                  <div className="flex flex-col gap-1.5 border-b border-line bg-slate-50/70 px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-[11px] font-semibold text-ink-800">
+                      {masterEditingId ? `Edit ${masterConfig.singular}` : `Tambah ${masterConfig.singular} baru`}
+                    </p>
+                    {masterEditingId ? (
+                      <Badge tone="warning" dot>
+                        Mode edit
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3 px-3.5 py-3.5 sm:grid-cols-2">
+                    {masterConfig.fields.map((field) => (
+                      <Field
+                        key={field.key}
+                        label={field.label}
+                        htmlFor={`master-${field.key}`}
+                        required={field.key === 'name'}
+                        className={masterConfig.fields.length === 1 || field.key === 'name' ? 'sm:col-span-2' : undefined}
+                      >
+                        <Input
+                          id={`master-${field.key}`}
+                          placeholder={field.placeholder}
+                          value={masterDraft[field.key] || ''}
+                          onChange={(event) =>
+                            setMasterDraft((previous) => ({ ...previous, [field.key]: event.target.value }))
+                          }
+                        />
+                      </Field>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2 border-t border-line px-3.5 py-2.5">
+                    {masterEditingId ? (
+                      <Button variant="secondary" size="sm" icon={X} onClick={resetMasterDraft}>
+                        Batal
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={masterEditingId ? Save : Plus}
+                      onClick={handleMasterSave}
+                    >
+                      {masterEditingId ? 'Simpan perubahan' : `Tambah ${masterConfig.singular}`}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-line rounded-xl border border-line bg-white">
+                  {masterItems.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div className="min-w-0">
+                        <p className="truncate text-[11.5px] font-semibold text-ink-900">{item.name}</p>
+                        <p className="mt-0.5 truncate text-[9.5px] text-ink-400">{masterSubtitle(item, masterKey)}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => startMasterEdit(item)}
+                          className="rounded p-1.5 text-ink-400 transition hover:bg-slate-100 hover:text-navy-700"
+                          aria-label={`Edit ${item.name}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => promptMasterDelete(item)}
+                          className="rounded p-1.5 text-ink-400 transition hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Hapus ${item.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-[9.5px] leading-relaxed text-ink-400">
+                  Perubahan data master langsung tersimpan di peramban ini. Item yang sedang dipakai oleh data aset,
+                  inventaris, karyawan, atau pengguna tidak dapat dihapus maupun diganti namanya.
+                </p>
+              </div>
+            ) : null}
           </Card>
         </div>
 
@@ -533,6 +882,19 @@ export default function Settings() {
           </p>
         </div>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(masterDelete)}
+        onClose={() => setMasterDelete(null)}
+        onConfirm={handleMasterDelete}
+        title="Hapus data master?"
+        description={
+          masterDelete
+            ? `${masterDelete.name} akan dihapus dari ${MASTER_COLLECTIONS[masterKey].label.toLowerCase()}. Tindakan ini tidak dapat dibatalkan.`
+            : ''
+        }
+        confirmLabel="Hapus data"
+      />
     </div>
   )
 }
